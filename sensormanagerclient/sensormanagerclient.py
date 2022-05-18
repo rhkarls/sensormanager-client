@@ -39,6 +39,7 @@ from io import StringIO
 
 import requests
 import pandas as pd
+import numpy as np
 
 
 class SensormanagerSession:
@@ -47,10 +48,12 @@ class SensormanagerSession:
         self.provider = provider
 
         self.api_s = requests.Session()
-                
-        user_agent = 'Mozilla/5.0 (Windows NT 10.0; WOW64; rv:77.0) Gecko/20100101 Firefox/77.0'
-        headers = {'User-Agent': user_agent}
-        
+
+        user_agent = (
+            "Mozilla/5.0 (Windows NT 10.0; WOW64; rv:77.0) Gecko/20100101 Firefox/77.0"
+        )
+        headers = {"User-Agent": user_agent}
+
         self.api_s.headers.update(headers)
 
         hash_password = hashlib.md5(password.encode("utf-8")).hexdigest()
@@ -73,19 +76,19 @@ class SensormanagerSession:
             self._set_id_dicts()
 
     def _authenticate(self):
-        """ Authenticate with server, can be used to re-auth in case of timeouts etc"""
+        """Authenticate with server, can be used to re-auth in case of timeouts etc"""
         r_auth = self.api_s.post(self.auth_url_t)
 
         # Note that .status_code always is returned 200, not working on this api call
         r_auth_response = json.loads(r_auth.content[50:-2])
-        
+
         return r_auth_response
-    
+
     def _reconnect(self):
         logging.info("_reconnect called")
-        
+
         r_auth_response = self._authenticate()
-        
+
         if r_auth_response["result"][0] == "-1":
             raise AuthenticationError
         else:
@@ -207,7 +210,7 @@ class SensormanagerSession:
                 f"https://www.sensormanager.net/{self.provider}/flot/export.php",
                 params=params,
             )
-            
+
         s_get = r_get.content.decode("utf-8")
         data_buffer = StringIO(s_get)
         data = pd.read_csv(
@@ -276,7 +279,7 @@ class SensormanagerSession:
         return data_logger
 
     @staticmethod
-    def clean_data(input_data, round_timestamp_freq=None):
+    def clean_data(input_data, round_timestamp_freq=None, zero_as_nan=True):
         """
         Basic sanitation and check of data.
 
@@ -284,6 +287,8 @@ class SensormanagerSession:
         - Check if index is all dates: Throws exception if not
         - Check if data is numeric: Converts to numeric if not
         - If round_timestamp_freq is passed: round timestamp to this frequency
+        - If zero_as_nan: sets zero values to NaN, default behavior. Missing values on
+          sensormanager are returned as zero by the http request.
         - Drops duplicate indicies
         - Sorts data by index
 
@@ -295,6 +300,9 @@ class SensormanagerSession:
         round_timestamp_freq : str, optional
             Pandas frequency string for rounding the timestamps.
             The default is None, i.e. no rounding takes place.
+        zero_as_nan: bool, optional
+            Flag for setting zero values equal to np.nan.
+            The default is True.
 
         Raises
         ------
@@ -321,7 +329,7 @@ class SensormanagerSession:
             raise NotImplementedError(
                 "Data index is not all dates. Solution not yet implemented"
             )
-        
+
         # check that all columns are numeric dtype
         # for dataframes and series
         try:
@@ -346,6 +354,10 @@ class SensormanagerSession:
 
         # sort by index
         clean_data = clean_data.sort_index()
+
+        # zero values as nan
+        if zero_as_nan:
+            clean_data.loc[clean_data == 0] = np.nan
 
         # attach the sensor_id_dict
         with warnings.catch_warnings():
