@@ -357,7 +357,7 @@ class SensormanagerSession:
 
         # zero values as nan
         if zero_as_nan:
-            clean_data.loc[clean_data == 0] = np.nan
+            clean_data = clean_data.replace({0: np.nan})
 
         # attach the sensor_id_dict
         with warnings.catch_warnings():
